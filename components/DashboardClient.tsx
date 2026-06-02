@@ -126,21 +126,37 @@ export default function DashboardClient() {
             <input ref={actualsFileRef} type="file" accept=".xlsx,.xlsm" className="hidden"
               onChange={e => { const f = e.target.files?.[0]; if (f) handleUpload(f, "/api/actuals/upload", "Actuals"); }} />
 
-            {/* Upload buttons */}
-            {(["Update Budget", "Update Actuals"] as const).map((label, idx) => {
-              const ref = idx === 0 ? budgetFileRef : actualsFileRef;
-              const isThis = isUploading && uploadState.status === "uploading" && uploadState.label === (idx === 0 ? "Budget" : "Actuals");
+            {/* Upload + Download buttons */}
+            {([
+              { label: "Update Budget",  uploadLabel: "Budget",  ref: budgetFileRef,  downloadHref: "/api/budget/download",  hasFile: data?.has_budget_file,  filename: data?.budget_filename },
+              { label: "Update Actuals", uploadLabel: "Actuals", ref: actualsFileRef, downloadHref: "/api/actuals/download", hasFile: data?.has_actuals_file, filename: data?.actuals_filename },
+            ] as const).map((item) => {
+              const isThis = isUploading && uploadState.status === "uploading" && uploadState.label === item.uploadLabel;
               return (
-                <button key={label} onClick={() => ref.current?.click()} disabled={isUploading}
-                  className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-medium border transition-all ${
-                    isThis ? "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed"
-                    : "bg-white border-slate-300 text-slate-700 hover:bg-slate-50 hover:border-slate-400"
-                  }`}>
-                  {isThis
-                    ? <><svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>Uploading…</>
-                    : <><svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>{label}</>
-                  }
-                </button>
+                <div key={item.label} className="flex items-center gap-1">
+                  {/* Upload button */}
+                  <button onClick={() => item.ref.current?.click()} disabled={isUploading}
+                    className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-medium border transition-all ${
+                      isThis ? "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed"
+                      : "bg-white border-slate-300 text-slate-700 hover:bg-slate-50 hover:border-slate-400"
+                    } ${item.hasFile ? "rounded-r-none border-r-0" : ""}`}>
+                    {isThis
+                      ? <><svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>Uploading…</>
+                      : <><svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>{item.label}</>
+                    }
+                  </button>
+                  {/* Download link — only shown when a file exists */}
+                  {item.hasFile && (
+                    <a href={item.downloadHref} download={item.filename ?? undefined}
+                      title={`Download ${item.filename ?? "file"}`}
+                      className="flex items-center justify-center px-2.5 py-2 rounded-r-lg border border-slate-300 bg-white text-slate-500 hover:bg-green-50 hover:text-green-700 hover:border-green-300 transition-all"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                      </svg>
+                    </a>
+                  )}
+                </div>
               );
             })}
 

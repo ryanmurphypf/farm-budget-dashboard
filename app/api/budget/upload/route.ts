@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { parseBudgetXlsx } from "@/lib/parse-budget";
+import path from "path";
+import fs from "fs";
 
 export const runtime = "nodejs";
+
+const DB_DIR = process.env.DATABASE_DIR || path.join(process.cwd(), "data");
 
 export async function POST(req: NextRequest) {
   let formData: FormData;
@@ -13,21 +17,17 @@ export async function POST(req: NextRequest) {
   }
 
   const file = formData.get("file") as File | null;
-  if (!file) {
-    return NextResponse.json({ error: "No file provided" }, { status: 400 });
-  }
+  if (!file) return NextResponse.json({ error: "No file provided" }, { status: 400 });
 
   const ext = file.name.toLowerCase();
   if (!ext.endsWith(".xlsx") && !ext.endsWith(".xlsm")) {
-    return NextResponse.json(
-      { error: "File must be a .xlsx or .xlsm workbook" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "File must be .xlsx or .xlsm" }, { status: 400 });
   }
+
+  const buffer = Buffer.from(await file.arrayBuffer());
 
   let entries;
   try {
-    const buffer = Buffer.from(await file.arrayBuffer());
     entries = parseBudgetXlsx(buffer);
   } catch (err) {
     console.error("Budget parse error:", err);
@@ -44,6 +44,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Save file to disk for later download
+  if (!fs.existsSync(DB_DIR)) fs.mkdirSync(DB_DIR, { recursive: true });
+  fs.writeFileSync(path.join(DB_DIR, "budget_upload.xlsx"), buffer);
+
   const db = getDb();
   const clear = db.prepare("DELETE FROM budget_entries");
   const ins = db.prepare(`
@@ -54,12 +58,9 @@ export async function POST(req: NextRequest) {
   db.transaction(() => {
     clear.run();
     for (const e of entries) ins.run(e);
+    db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").run("budget_filename", file.name);
+    db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").run("budget_uploaded_at", new Date().toISOString());
   })();
 
-  return NextResponse.json({
-    ok: true,
-    count: entries.length,
-    filename: file.name,
-    timestamp: new Date().toISOString(),
-  });
+  return NextResponse.json({ ok: true, count: entries.length, filename: file.name, timestamp: new Date().toISOString() });
 }

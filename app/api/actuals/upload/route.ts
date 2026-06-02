@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { parseActualsXlsx } from "@/lib/parse-actuals";
+import path from "path";
+import fs from "fs";
 
 export const runtime = "nodejs";
+
+const DB_DIR = process.env.DATABASE_DIR || path.join(process.cwd(), "data");
 
 export async function POST(req: NextRequest) {
   let formData: FormData;
@@ -20,9 +24,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "File must be .xlsx or .xlsm" }, { status: 400 });
   }
 
+  const buffer = Buffer.from(await file.arrayBuffer());
+
   let result;
   try {
-    const buffer = Buffer.from(await file.arrayBuffer());
     result = parseActualsXlsx(buffer);
   } catch (err) {
     console.error("Actuals parse error:", err);
@@ -39,6 +44,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Save file to disk for later download
+  if (!fs.existsSync(DB_DIR)) fs.mkdirSync(DB_DIR, { recursive: true });
+  fs.writeFileSync(path.join(DB_DIR, "actuals_upload.xlsx"), buffer);
+
   const db = getDb();
   const clear = db.prepare("DELETE FROM actual_entries");
   const ins = db.prepare(`
@@ -48,15 +57,10 @@ export async function POST(req: NextRequest) {
 
   db.transaction(() => {
     clear.run();
-    for (const e of result.entries) {
-      ins.run({ ...e, as_of_date: result.as_of_date });
-    }
+    for (const e of result.entries) ins.run({ ...e, as_of_date: result.as_of_date });
+    db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").run("actuals_filename", file.name);
+    db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").run("actuals_uploaded_at", new Date().toISOString());
   })();
 
-  return NextResponse.json({
-    ok: true,
-    count: result.entries.length,
-    as_of_date: result.as_of_date,
-    filename: file.name,
-  });
+  return NextResponse.json({ ok: true, count: result.entries.length, as_of_date: result.as_of_date, filename: file.name });
 }

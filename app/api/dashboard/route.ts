@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import type { PeriodKey } from "@/lib/constants";
+import path from "path";
+import fs from "fs";
+
+const DB_DIR = process.env.DATABASE_DIR || path.join(process.cwd(), "data");
 
 const VALID_PERIODS: PeriodKey[] = ["ye_total", "q1", "q2", "q3", "q4"];
 
@@ -58,6 +62,10 @@ export type DashboardResponse = {
   period: string;
   as_of_date: string | null;
   has_actuals: boolean;
+  has_budget_file: boolean;
+  has_actuals_file: boolean;
+  budget_filename: string | null;
+  actuals_filename: string | null;
   classes: ClassRow[];
   net_income: {
     combined: EntityMetrics;
@@ -366,10 +374,20 @@ export async function GET(req: NextRequest) {
   }
   eliminations.sort((a, b) => a.class.localeCompare(b.class) || a.acct.localeCompare(b.acct));
 
+  // File availability for download links
+  const hasBudgetFile = fs.existsSync(path.join(DB_DIR, "budget_upload.xlsx"));
+  const hasActualsFile = fs.existsSync(path.join(DB_DIR, "actuals_upload.xlsx"));
+  const budgetFilename = (db.prepare("SELECT value FROM settings WHERE key='budget_filename'").get() as { value: string } | undefined)?.value ?? null;
+  const actualsFilename = (db.prepare("SELECT value FROM settings WHERE key='actuals_filename'").get() as { value: string } | undefined)?.value ?? null;
+
   return NextResponse.json({
     period,
     as_of_date: asOfDate,
     has_actuals: hasActuals,
+    has_budget_file: hasBudgetFile,
+    has_actuals_file: hasActualsFile,
+    budget_filename: budgetFilename,
+    actuals_filename: actualsFilename,
     classes,
     net_income: { combined: netCombined, pfp: netPfp, pge: netPge, lgc: netLgc },
     eliminations,
