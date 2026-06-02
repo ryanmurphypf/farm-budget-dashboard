@@ -155,25 +155,97 @@ export default function DashboardClient() {
         {data && net && (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             {[
-              { label: "Combined Income", val: income?.combined.projected ?? 0, actual: income?.combined.actual, color: "green" },
-              { label: "Combined Expenses", val: expenses?.combined.projected ?? 0, actual: expenses?.combined.actual, color: "red" },
-              { label: "Combined Net Income", val: net.combined.projected, actual: net.combined.actual, color: net.combined.projected >= 0 ? "slate" : "red" },
-              { label: "Net Margin", val: null, actual: null,
-                pct: income?.combined.projected ? (net.combined.projected / income.combined.projected * 100) : null,
-                color: "slate" },
-            ].map((card, i) => (
-              <div key={i} className={`bg-white rounded-xl border px-5 py-4 ${
-                card.color === "green" ? "border-green-200" : card.color === "red" ? "border-red-200" : "border-slate-200"
-              }`}>
-                <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">{card.label}</p>
-                <p className={`text-xl font-bold mt-1 ${card.color === "green" ? "text-green-700" : card.color === "red" ? "text-red-700" : "text-slate-800"}`}>
-                  {card.val !== null ? fmtShort(card.val) : card.pct !== null ? `${card.pct.toFixed(1)}%` : "—"}
-                </p>
-                {data.has_actuals && card.actual !== undefined && card.actual !== null && (
-                  <p className="text-xs text-slate-400 mt-0.5">Actual: <span className="text-slate-600 font-medium">{fmtShort(card.actual)}</span></p>
-                )}
-              </div>
-            ))}
+              {
+                label: "Combined Income",
+                projected: income?.combined.projected ?? 0,
+                actual: income?.combined.actual ?? 0,
+                variance: income?.combined.variance ?? 0,
+                cls: "Income",
+                color: "green",
+              },
+              {
+                label: "Combined Expenses",
+                projected: expenses?.combined.projected ?? 0,
+                actual: expenses?.combined.actual ?? 0,
+                variance: expenses?.combined.variance ?? 0,
+                cls: "Expenses",
+                color: "red",
+              },
+              {
+                label: "Net Income",
+                projected: net.combined.projected,
+                actual: net.combined.actual,
+                variance: net.combined.variance,
+                cls: "Income",
+                color: net.combined.projected >= 0 ? "slate" : "red",
+              },
+              {
+                label: "Net Margin (Proj)",
+                projected: income?.combined.projected ? (net.combined.projected / income.combined.projected * 100) : 0,
+                actual: (data.has_actuals && income?.combined.actual) ? (net.combined.actual / income.combined.actual * 100) : null,
+                variance: null,
+                cls: "pct",
+                color: "slate",
+              },
+            ].map((card, i) => {
+              const isPct = card.cls === "pct";
+              const hasAct = data.has_actuals && !isPct;
+              const borderCls = card.color === "green" ? "border-green-200" : card.color === "red" ? "border-red-200" : "border-slate-200";
+              const heroColor = card.color === "green" ? "text-green-700" : card.color === "red" ? "text-red-700" : "text-slate-800";
+              const varCls = card.variance != null
+                ? card.cls === "Expenses"
+                  ? (card.variance < 0 ? "text-green-600" : "text-red-600")
+                  : (card.variance > 0 ? "text-green-600" : "text-red-600")
+                : "";
+              return (
+                <div key={i} className={`bg-white rounded-xl border ${borderCls} px-5 py-4`}>
+                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">{card.label}</p>
+
+                  {/* Actual — hero number (when actuals exist) */}
+                  {hasAct ? (
+                    <>
+                      <p className="text-[11px] font-medium text-slate-400 uppercase tracking-wide">Actual</p>
+                      <p className={`text-2xl font-bold leading-tight ${heroColor}`}>
+                        {fmtShort(card.actual ?? 0)}
+                      </p>
+                      {/* Projected — secondary */}
+                      <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between">
+                        <span className="text-[11px] text-slate-400">Proj: <span className="text-slate-600 font-semibold text-sm">{fmtShort(card.projected)}</span></span>
+                        {card.variance != null && card.variance !== 0 && (
+                          <span className={`text-xs font-semibold ${varCls}`}>{fmtShort(card.variance)}</span>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    /* No actuals yet — projected is the only number */
+                    <>
+                      <p className="text-[11px] font-medium text-slate-400 uppercase tracking-wide">Projected</p>
+                      <p className={`text-2xl font-bold leading-tight ${heroColor}`}>
+                        {isPct
+                          ? `${(card.projected as number).toFixed(1)}%`
+                          : fmtShort(card.projected as number)}
+                      </p>
+                      {isPct && card.actual != null && (
+                        <p className="text-xs text-slate-400 mt-1">Actual: <span className="text-slate-600 font-semibold">{(card.actual as number).toFixed(1)}%</span></p>
+                      )}
+                    </>
+                  )}
+
+                  {/* Pct card with actuals */}
+                  {isPct && data.has_actuals && (
+                    <>
+                      <p className="text-[11px] font-medium text-slate-400 uppercase tracking-wide">Actual Margin</p>
+                      <p className={`text-2xl font-bold leading-tight ${(card.actual ?? 0) >= 0 ? "text-slate-800" : "text-red-700"}`}>
+                        {card.actual != null ? `${(card.actual as number).toFixed(1)}%` : "—"}
+                      </p>
+                      <div className="mt-2 pt-2 border-t border-slate-100">
+                        <span className="text-[11px] text-slate-400">Proj margin: <span className="text-slate-600 font-semibold text-sm">{(card.projected as number).toFixed(1)}%</span></span>
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
 
