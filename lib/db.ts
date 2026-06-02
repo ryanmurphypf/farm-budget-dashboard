@@ -36,6 +36,7 @@ function initSchema(db: Database.Database) {
       class TEXT NOT NULL,
       subclass TEXT NOT NULL,
       detail TEXT DEFAULT '',
+      int_ext TEXT DEFAULT '',
       ye_total REAL DEFAULT 0,
       q1 REAL DEFAULT 0,
       q2 REAL DEFAULT 0,
@@ -45,6 +46,7 @@ function initSchema(db: Database.Database) {
 
     CREATE INDEX IF NOT EXISTS idx_budget_entity ON budget_entries(entity);
     CREATE INDEX IF NOT EXISTS idx_budget_class ON budget_entries(class);
+    CREATE INDEX IF NOT EXISTS idx_budget_int_ext ON budget_entries(int_ext);
   `);
 
   const pw = db.prepare("SELECT value FROM settings WHERE key = ?").get("password_hash");
@@ -65,8 +67,8 @@ function seedBudget(db: Database.Database) {
   }
   const entries = JSON.parse(fs.readFileSync(seedPath, "utf-8")) as BudgetEntry[];
   const ins = db.prepare(`
-    INSERT INTO budget_entries (entity, acct, acct_desc, class, subclass, detail, ye_total, q1, q2, q3, q4)
-    VALUES (@entity, @acct, @acct_desc, @class, @subclass, @detail, @ye_total, @q1, @q2, @q3, @q4)
+    INSERT INTO budget_entries (entity, acct, acct_desc, class, subclass, detail, int_ext, ye_total, q1, q2, q3, q4)
+    VALUES (@entity, @acct, @acct_desc, @class, @subclass, @detail, @int_ext, @ye_total, @q1, @q2, @q3, @q4)
   `);
   const run = db.transaction((rows: BudgetEntry[]) => {
     rows.forEach((r) => ins.run(r));
@@ -82,6 +84,7 @@ export type BudgetEntry = {
   class: string;
   subclass: string;
   detail: string;
+  int_ext: string;
   ye_total: number;
   q1: number;
   q2: number;

@@ -51,7 +51,11 @@ export async function GET(req: NextRequest) {
 
   const db = getDb();
 
-  const entityFilter = entity === "Combined" ? "" : "AND entity = ?";
+  // Combined view: exclude intercompany (int_ext = 'Internal') to avoid double-counting
+  // Individual entity views: include all rows including internal transactions
+  const entityFilter = entity === "Combined"
+    ? "AND int_ext != 'Internal'"
+    : "AND entity = ?";
   const entityArgs = entity === "Combined" ? [] : [entity];
 
   const sql = `
@@ -77,6 +81,25 @@ export async function GET(req: NextRequest) {
     acct_desc: string;
     value: number;
   }[];
+
+  // Seed intercompany elimination (Combined only):
+  // LGC's Internal Seed Sales (41026) + Internal Seed Processing (41025) are eliminated
+  // from income via the int_ext filter above. The matching expense side sits inside PFP's
+  // Seed Expense (51120) which is a mix of internal and external vendors — so we can't tag
+  // the whole account as Internal. Instead we compute the exact LGC seed amount for the
+  // selected period and subtract it from PFP's 51120 row in the Combined results.
+  if (entity === "Combined") {
+    const { seedElim } = db.prepare(`
+      SELECT COALESCE(SUM(${period}), 0) as seedElim
+      FROM budget_entries
+      WHERE entity = 'LGC' AND acct IN ('41025', '41026')
+    `).get() as { seedElim: number };
+
+    if (seedElim !== 0) {
+      const seedRow = rows.find((r) => r.acct === "51120");
+      if (seedRow) seedRow.value -= seedElim;
+    }
+  }
 
   // Build hierarchy
   const classMap = new Map<string, Map<string, Map<string, AccountRow[]>>>();

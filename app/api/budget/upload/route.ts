@@ -47,8 +47,8 @@ export async function POST(req: NextRequest) {
   const db = getDb();
   const clear = db.prepare("DELETE FROM budget_entries");
   const ins = db.prepare(`
-    INSERT INTO budget_entries (entity, acct, acct_desc, class, subclass, detail, ye_total, q1, q2, q3, q4)
-    VALUES (@entity, @acct, @acct_desc, @class, @subclass, @detail, @ye_total, @q1, @q2, @q3, @q4)
+    INSERT INTO budget_entries (entity, acct, acct_desc, class, subclass, detail, int_ext, ye_total, q1, q2, q3, q4)
+    VALUES (@entity, @acct, @acct_desc, @class, @subclass, @detail, @int_ext, @ye_total, @q1, @q2, @q3, @q4)
   `);
 
   db.transaction(() => {

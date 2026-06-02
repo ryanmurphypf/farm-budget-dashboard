@@ -42,6 +42,7 @@ export function parseBudgetXlsx(buffer: Buffer): BudgetEntry[] {
         class: cls,
         subclass: String(r[22] ?? "").trim(),
         detail: String(r[23] ?? "").trim(),
+        int_ext: String(r[24] ?? "").trim(),
         ye_total: Math.round(yeTotal * 100) / 100,
         q1: Math.round(q1 * 100) / 100,
         q2: Math.round(q2 * 100) / 100,
