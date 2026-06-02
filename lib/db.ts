@@ -47,6 +47,22 @@ function initSchema(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_budget_entity ON budget_entries(entity);
     CREATE INDEX IF NOT EXISTS idx_budget_class ON budget_entries(class);
     CREATE INDEX IF NOT EXISTS idx_budget_int_ext ON budget_entries(int_ext);
+
+    CREATE TABLE IF NOT EXISTS actual_entries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      acct TEXT NOT NULL,
+      acct_desc TEXT NOT NULL,
+      class TEXT NOT NULL,
+      pfp REAL DEFAULT 0,
+      pge REAL DEFAULT 0,
+      lgc REAL DEFAULT 0,
+      elim REAL DEFAULT 0,
+      combined REAL DEFAULT 0,
+      as_of_date TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_actual_acct ON actual_entries(acct);
+    CREATE INDEX IF NOT EXISTS idx_actual_class ON actual_entries(class);
   `);
 
   const pw = db.prepare("SELECT value FROM settings WHERE key = ?").get("password_hash");
