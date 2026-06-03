@@ -57,10 +57,18 @@ export async function POST(req: NextRequest) {
 
   db.transaction(() => {
     clear.run();
-    for (const e of result.entries) ins.run({ ...e, as_of_date: result.as_of_date });
+    for (const e of result.entries) ins.run({ ...e, as_of_date: result.end_date });
     db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").run("actuals_filename", file.name);
     db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").run("actuals_uploaded_at", new Date().toISOString());
+    db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").run("actuals_beg_date", result.beg_date);
+    db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").run("actuals_end_date", result.end_date);
   })();
 
-  return NextResponse.json({ ok: true, count: result.entries.length, as_of_date: result.as_of_date, filename: file.name });
+  return NextResponse.json({
+    ok: true,
+    count: result.entries.length,
+    beg_date: result.beg_date,
+    end_date: result.end_date,
+    filename: file.name,
+  });
 }

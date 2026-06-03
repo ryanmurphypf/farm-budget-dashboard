@@ -58,7 +58,7 @@ export default function DashboardClient() {
         setUploadState({ status: "error", message: json.error ?? "Upload failed" });
       } else {
         const msg = endpoint.includes("actuals")
-          ? `Actuals updated — ${json.count} rows, as of ${fmtDate(json.as_of_date)}`
+          ? `Actuals updated — ${json.count} rows · ${fmtDate(json.beg_date)} – ${fmtDate(json.end_date)}`
           : `Budget updated — ${json.count} rows from ${json.filename}`;
         setUploadState({ status: "success", msg });
         await fetchData();
@@ -94,8 +94,10 @@ export default function DashboardClient() {
             <h1 className="text-xl font-bold text-slate-800 leading-tight">Peterson Farms</h1>
             <p className="text-xs text-slate-500 mt-0.5">
               FY2026 Budget &mdash; Feb 1, 2026 &ndash; Jan 31, 2027
-              {data?.as_of_date && (
-                <span className="ml-2 text-blue-600 font-medium">· Actuals YTD through {fmtDate(data.as_of_date)}</span>
+              {data?.ytd_beg_date && data?.ytd_end_date && (
+                <span className="ml-2 text-blue-600 font-medium">
+                  · Actuals YTD: {fmtDate(data.ytd_beg_date)} &ndash; {fmtDate(data.ytd_end_date)}
+                </span>
               )}
             </p>
           </div>

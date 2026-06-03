@@ -13,32 +13,57 @@ export type ActualEntry = {
 
 export type ActualsParseResult = {
   entries: ActualEntry[];
-  as_of_date: string; // ISO date string from Paste_Data row 2
+  beg_date: string; // ISO date — from Info sheet "Beg Date"
+  end_date: string; // ISO date — from Info sheet "End Date"
 };
+
+function excelSerialToISO(serial: number): string {
+  // Excel serial: days since Dec 30 1899 (accounting for the 1900 leap-year bug)
+  const jsDate = new Date(Math.round((serial - 25569) * 86400 * 1000));
+  return jsDate.toISOString().split("T")[0];
+}
 
 export function parseActualsXlsx(buffer: Buffer): ActualsParseResult {
   const wb = xlsx.read(buffer, { type: "buffer" });
 
-  // Extract as_of_date from Paste_Data sheet (row 2, col C = serial date)
-  let as_of_date = new Date().toISOString().split("T")[0];
-  const pasteWs = wb.Sheets["Paste_Data"];
-  if (pasteWs) {
-    const pasteData = xlsx.utils.sheet_to_json(pasteWs, {
+  // ── Dates from Info sheet ────────────────────────────────────────────────
+  let beg_date = "";
+  let end_date = "";
+  const infoWs = wb.Sheets["Info"];
+  if (infoWs) {
+    const infoData = xlsx.utils.sheet_to_json(infoWs, {
       header: 1,
       defval: "",
     }) as (string | number)[][];
-    const serial = pasteData[1]?.[2];
-    if (typeof serial === "number" && serial > 40000) {
-      // Convert Excel serial date to JS date
-      const jsDate = new Date(Math.round((serial - 25569) * 86400 * 1000));
-      as_of_date = jsDate.toISOString().split("T")[0];
+    // Row 1: ["Beg Date", serial]   Row 2: ["End Date", serial]
+    for (const row of infoData) {
+      const label = String(row[0] ?? "").trim();
+      const serial = row[1];
+      if (label === "Beg Date" && typeof serial === "number" && serial > 40000) {
+        beg_date = excelSerialToISO(serial);
+      }
+      if (label === "End Date" && typeof serial === "number" && serial > 40000) {
+        end_date = excelSerialToISO(serial);
+      }
     }
   }
 
+  // Fallback: derive from Paste_Data col C if Info sheet missing
+  if (!end_date) {
+    const pasteWs = wb.Sheets["Paste_Data"];
+    if (pasteWs) {
+      const pasteData = xlsx.utils.sheet_to_json(pasteWs, { header: 1, defval: "" }) as (string | number)[][];
+      const serial = pasteData[1]?.[2];
+      if (typeof serial === "number" && serial > 40000) end_date = excelSerialToISO(serial);
+    }
+  }
+  if (!beg_date) beg_date = end_date; // last resort
+  if (!end_date) end_date = new Date().toISOString().split("T")[0];
+
+  // ── Data from Combined Actual IS ─────────────────────────────────────────
   const ws = wb.Sheets["Combined Actual IS"];
   if (!ws) throw new Error('Sheet "Combined Actual IS" not found in workbook');
 
-  // Columns: Class(0), Acct(1), Description(2), PFP(3), PGE(4), LGC(5), Elim(6), Total(7), ShowRow(8)
   const data = xlsx.utils.sheet_to_json(ws, {
     header: 1,
     defval: "",
@@ -49,7 +74,6 @@ export function parseActualsXlsx(buffer: Buffer): ActualsParseResult {
   for (let i = 1; i < data.length; i++) {
     const r = data[i];
     const rawClass = String(r[0] ?? "").trim();
-    // Only include Income and Expense rows (actuals sheet uses "Expense" singular)
     if (rawClass !== "Income" && rawClass !== "Expense") continue;
 
     const cls = rawClass === "Expense" ? "Expenses" : "Income";
@@ -66,13 +90,13 @@ export function parseActualsXlsx(buffer: Buffer): ActualsParseResult {
       acct,
       acct_desc: String(r[2] ?? "").trim(),
       class: cls,
-      pfp: Math.round(pfp * 100) / 100,
-      pge: Math.round(pge * 100) / 100,
-      lgc: Math.round(lgc * 100) / 100,
-      elim: Math.round(elim * 100) / 100,
+      pfp:      Math.round(pfp      * 100) / 100,
+      pge:      Math.round(pge      * 100) / 100,
+      lgc:      Math.round(lgc      * 100) / 100,
+      elim:     Math.round(elim     * 100) / 100,
       combined: Math.round(combined * 100) / 100,
     });
   }
 
-  return { entries, as_of_date };
+  return { entries, beg_date, end_date };
 }

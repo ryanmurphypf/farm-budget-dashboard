@@ -60,7 +60,9 @@ export type EliminationRow = {
 
 export type DashboardResponse = {
   period: string;
-  as_of_date: string | null;
+  as_of_date: string | null;   // end date (kept for backwards compat)
+  ytd_beg_date: string | null; // period start from Info sheet
+  ytd_end_date: string | null; // period end from Info sheet
   has_actuals: boolean;
   has_budget_file: boolean;
   has_actuals_file: boolean;
@@ -176,6 +178,12 @@ export async function GET(req: NextRequest) {
   const hasActuals = actualRows.length > 0;
   const asOfDate = hasActuals
     ? (db.prepare("SELECT as_of_date FROM actual_entries LIMIT 1").get() as { as_of_date: string })?.as_of_date ?? null
+    : null;
+  const ytdBegDate = hasActuals
+    ? (db.prepare("SELECT value FROM settings WHERE key='actuals_beg_date'").get() as { value: string } | undefined)?.value ?? null
+    : null;
+  const ytdEndDate = hasActuals
+    ? (db.prepare("SELECT value FROM settings WHERE key='actuals_end_date'").get() as { value: string } | undefined)?.value ?? asOfDate
     : null;
 
   // actuals maps: acct → value per entity
@@ -383,6 +391,8 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     period,
     as_of_date: asOfDate,
+    ytd_beg_date: ytdBegDate,
+    ytd_end_date: ytdEndDate,
     has_actuals: hasActuals,
     has_budget_file: hasBudgetFile,
     has_actuals_file: hasActualsFile,
