@@ -115,6 +115,11 @@ function addMetrics(a: EntityMetrics, b: EntityMetrics): EntityMetrics {
   };
 }
 
+// Accounts excluded from all dashboard views (both projected and actual).
+// These are inventory/held-grain adjustment accounts that distort P&L.
+const EXCLUDED_ACCTS = ["41009", "51028"];
+const EXCLUDED_PLACEHOLDER = EXCLUDED_ACCTS.map(() => "?").join(",");
+
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
   const period = (searchParams.get("period") || "ye_total") as PeriodKey;
@@ -132,9 +137,10 @@ export async function GET(req: NextRequest) {
            SUM(${period}) as value
     FROM budget_entries
     WHERE class IN ('Income', 'Expenses')
+      AND acct NOT IN (${EXCLUDED_PLACEHOLDER})
     GROUP BY entity, class, subclass, detail, acct, acct_desc
     ORDER BY class, subclass, detail, acct
-  `).all() as BudgetRow[];
+  `).all(...EXCLUDED_ACCTS) as BudgetRow[];
 
   // Seed elimination: subtract LGC 41025+41026 from PFP 51120 in combined
   const { seedElim } = db.prepare(`
@@ -172,8 +178,9 @@ export async function GET(req: NextRequest) {
   const actualRows = db.prepare(`
     SELECT acct, acct_desc, class, pfp, pge, lgc, elim, combined
     FROM actual_entries
+    WHERE acct NOT IN (${EXCLUDED_PLACEHOLDER})
     ORDER BY class, acct
-  `).all() as ActualRow[];
+  `).all(...EXCLUDED_ACCTS) as ActualRow[];
 
   const hasActuals = actualRows.length > 0;
   const asOfDate = hasActuals
