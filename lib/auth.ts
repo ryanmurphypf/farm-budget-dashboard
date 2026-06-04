@@ -9,10 +9,10 @@ const SECRET = new TextEncoder().encode(
 );
 
 export async function login(password: string): Promise<boolean> {
-  const db = getDb();
-  const row = db.prepare("SELECT value FROM settings WHERE key = ?").get("password_hash") as { value: string } | undefined;
-  if (!row) return false;
-  const match = await bcrypt.compare(password, row.value);
+  const db = await getDb();
+  const result = await db.query("SELECT value FROM settings WHERE key = 'password_hash'");
+  if (result.rows.length === 0) return false;
+  const match = await bcrypt.compare(password, result.rows[0].value);
   if (!match) return false;
 
   const token = await new SignJWT({ authenticated: true })
@@ -34,4 +34,8 @@ export async function login(password: string): Promise<boolean> {
 export async function logout() {
   const cookieStore = await cookies();
   cookieStore.delete(SESSION_COOKIE);
+}
+
+export async function verifyToken(token: string): Promise<boolean> {
+  try { await jwtVerify(token, SECRET); return true; } catch { return false; }
 }

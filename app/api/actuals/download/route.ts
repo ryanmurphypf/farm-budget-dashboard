@@ -1,22 +1,18 @@
 import { NextResponse } from "next/server";
-import { getDb, DB_DIR } from "@/lib/db";
-import path from "path";
-import fs from "fs";
+import { getDb } from "@/lib/db";
 
 export const runtime = "nodejs";
 
 export async function GET() {
-  const filePath = path.join(DB_DIR, "actuals_upload.xlsx");
-  if (!fs.existsSync(filePath)) {
+  const db = await getDb();
+  const result = await db.query(
+    "SELECT filename, data FROM uploaded_files WHERE key = 'actuals'"
+  );
+  if (result.rows.length === 0)
     return NextResponse.json({ error: "No actuals file uploaded yet" }, { status: 404 });
-  }
 
-  const db = getDb();
-  const row = db.prepare("SELECT value FROM settings WHERE key = 'actuals_filename'").get() as { value: string } | undefined;
-  const filename = row?.value ?? "actuals.xlsx";
-
-  const buffer = fs.readFileSync(filePath);
-  return new NextResponse(buffer, {
+  const { filename, data } = result.rows[0];
+  return new NextResponse(data, {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "Content-Disposition": `attachment; filename="${filename}"`,
