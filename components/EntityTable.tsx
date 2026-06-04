@@ -37,7 +37,7 @@ function MetricCells({ m, cls, hasActuals }: { m: EntityMetrics; cls: string; ha
 function AccountRowEl({ acct, entity, cls, hasActuals }: { acct: AccountRow; entity: EntityKey; cls: string; hasActuals: boolean }) {
   const m = acct[entity];
   return (
-    <tr className="hover:bg-slate-50/60">
+    <tr className="hover:bg-blue-50/70">
       <td className="pl-20 pr-4 py-1.5 text-xs text-slate-500">
         <span className="font-mono text-slate-400 mr-2 text-[11px]">{acct.acct}</span>
         {acct.acct_desc}
@@ -53,7 +53,7 @@ function DetailRowEl({ detail, entity, cls, depth, hasActuals }: { detail: Detai
   const pl = depth * 24;
   return (
     <>
-      <tr className="hover:bg-slate-50 cursor-pointer" onClick={() => setOpen(v => !v)}>
+      <tr className="hover:bg-blue-50 cursor-pointer" onClick={() => setOpen(v => !v)}>
         <td className="py-2 pr-4" style={{ paddingLeft: `${pl}px` }}>
           <div className="flex items-center gap-2">
             <ChevronIcon open={open} />
@@ -75,7 +75,7 @@ function SubclassRowEl({ sub, entity, cls, hasActuals }: { sub: SubclassRow; ent
   const hasNamedDetails = sub.details.some(d => d.detail !== "");
   return (
     <>
-      <tr className="hover:bg-slate-50 cursor-pointer" onClick={() => setOpen(v => !v)}>
+      <tr className="hover:bg-blue-50 cursor-pointer" onClick={() => setOpen(v => !v)}>
         <td className="pl-10 pr-4 py-2.5">
           <div className="flex items-center gap-2">
             <ChevronIcon open={open} />
@@ -119,7 +119,7 @@ function ClassRowEl({ cls, entity, isNet, hasActuals }: { cls: ClassRow; entity:
   const isIncome = cls.class === "Income";
   return (
     <>
-      <tr className={`cursor-pointer ${isIncome ? "bg-green-50 hover:bg-green-100/60" : "bg-red-50 hover:bg-red-100/60"}`}
+      <tr className={`cursor-pointer ${isIncome ? "bg-green-50 hover:bg-blue-100/70" : "bg-red-50 hover:bg-blue-100/70"}`}
         onClick={() => setOpen(v => !v)}>
         <td className="pl-6 pr-4 py-3.5">
           <div className="flex items-center gap-2">

@@ -26,7 +26,7 @@ function V({ m, cls }: { m: EntityMetrics; cls: string }) {
 
 function AccountRow12({ a, cls }: { a: AccountRow; cls: string }) {
   return (
-    <tr className="hover:bg-slate-50/40">
+    <tr className="hover:bg-blue-50/70">
       <td className="pl-16 pr-3 py-1.5 text-xs text-slate-500 whitespace-nowrap">
         <span className="font-mono text-slate-400 mr-1.5 text-[11px]">{a.acct}</span>{a.acct_desc}
       </td>
@@ -42,7 +42,7 @@ function DetailRow12({ d, cls }: { d: DetailRow; cls: string }) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <tr className="hover:bg-slate-50 cursor-pointer" onClick={() => setOpen(v => !v)}>
+      <tr className="hover:bg-blue-50 cursor-pointer" onClick={() => setOpen(v => !v)}>
         <td className="pl-12 pr-3 py-2">
           <div className="flex items-center gap-2">
             <ChevronIcon open={open} />
@@ -61,7 +61,7 @@ function SubclassRow12({ sub, cls }: { sub: SubclassRow; cls: string }) {
   const hasNamedDetails = sub.details.some(d => d.detail !== "");
   return (
     <>
-      <tr className="hover:bg-slate-50 cursor-pointer" onClick={() => setOpen(v => !v)}>
+      <tr className="hover:bg-blue-50 cursor-pointer" onClick={() => setOpen(v => !v)}>
         <td className="pl-8 pr-3 py-2.5">
           <div className="flex items-center gap-2">
             <ChevronIcon open={open} />
@@ -100,7 +100,7 @@ function ClassRow12({ cls, isNet }: { cls: ClassRow; isNet?: boolean }) {
   const isIncome = cls.class === "Income";
   return (
     <>
-      <tr className={`cursor-pointer ${isIncome ? "bg-green-50 hover:bg-green-100/60" : "bg-red-50 hover:bg-red-100/60"}`}
+      <tr className={`cursor-pointer ${isIncome ? "bg-green-50 hover:bg-blue-100/70" : "bg-red-50 hover:bg-blue-100/70"}`}
         onClick={() => setOpen(v => !v)}>
         <td className="pl-5 pr-3 py-3">
           <div className="flex items-center gap-2">

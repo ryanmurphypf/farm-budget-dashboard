@@ -26,7 +26,7 @@ export default function EliminationsTab({ data }: { data: DashboardResponse }) {
             {rows.map((r, i) => {
               const variance = r.actual - r.projected;
               return (
-                <tr key={i} className="hover:bg-slate-50">
+                <tr key={i} className="hover:bg-blue-50">
                   <td className="px-4 py-2 text-xs font-mono text-slate-500">{r.acct}</td>
                   <td className="px-4 py-2 text-xs text-slate-700">{r.acct_desc}</td>
                   <td className="px-4 py-2 text-right text-xs tabular-nums text-slate-700 font-medium whitespace-nowrap">
