@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/db";
+import { getDb, DB_DIR } from "@/lib/db";
 import type { PeriodKey } from "@/lib/constants";
 import path from "path";
 import fs from "fs";
-
-const DB_DIR = process.env.DATABASE_DIR || path.join(process.cwd(), "data");
 
 const VALID_PERIODS: PeriodKey[] = ["ye_total", "q1", "q2", "q3", "q4"];
 

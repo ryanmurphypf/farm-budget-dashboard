@@ -1,11 +1,9 @@
 import { NextResponse } from "next/server";
-import { getDb } from "@/lib/db";
+import { getDb, DB_DIR } from "@/lib/db";
 import path from "path";
 import fs from "fs";
 
 export const runtime = "nodejs";
-
-const DB_DIR = process.env.DATABASE_DIR || path.join(process.cwd(), "data");
 
 export async function GET() {
   const filePath = path.join(DB_DIR, "actuals_upload.xlsx");

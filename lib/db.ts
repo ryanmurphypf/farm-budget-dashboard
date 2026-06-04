@@ -3,8 +3,28 @@ import path from "path";
 import fs from "fs";
 import bcrypt from "bcryptjs";
 
-const DB_DIR = process.env.DATABASE_DIR || path.join(process.cwd(), "data");
-if (!fs.existsSync(DB_DIR)) fs.mkdirSync(DB_DIR, { recursive: true });
+function resolveDbDir(): string {
+  const candidates = [
+    process.env.DATABASE_DIR,
+    path.join(process.cwd(), "data"),
+    path.join("/tmp", "pfp-budget-data"),
+  ].filter(Boolean) as string[];
+
+  for (const dir of candidates) {
+    try {
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      // Verify we can actually write here
+      fs.writeFileSync(path.join(dir, ".write-test"), "ok");
+      fs.unlinkSync(path.join(dir, ".write-test"));
+      return dir;
+    } catch {
+      console.warn(`DB dir not writable: ${dir}, trying next...`);
+    }
+  }
+  throw new Error("No writable directory found for SQLite database");
+}
+
+export const DB_DIR = resolveDbDir();
 const DB_PATH = path.join(DB_DIR, "db.sqlite");
 
 declare global {

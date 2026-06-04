@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/db";
+import { getDb, DB_DIR } from "@/lib/db";
 import { parseActualsXlsx } from "@/lib/parse-actuals";
 import path from "path";
 import fs from "fs";
 
 export const runtime = "nodejs";
-
-const DB_DIR = process.env.DATABASE_DIR || path.join(process.cwd(), "data");
 
 export async function POST(req: NextRequest) {
   let formData: FormData;
