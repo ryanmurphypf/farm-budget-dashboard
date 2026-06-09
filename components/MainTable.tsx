@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, Fragment } from "react";
 import type { DashboardResponse, ClassRow, SubclassRow, DetailRow, AccountRow, EntityMetrics } from "@/app/api/dashboard/route";
 import { fmtDollar, varColor } from "@/lib/format";
 
@@ -132,11 +132,18 @@ export default function MainTable({ data }: { data: DashboardResponse }) {
   ];
 
   return (
-    <div className="overflow-x-auto">
+    /* overflow-auto (both axes) + maxHeight makes this div the scroll container.
+       position:sticky on <thead> then sticks to the top of THIS container,
+       which sidesteps the overflow-hidden / overflow-x-auto ancestor problem. */
+    <div
+      className="overflow-auto"
+      style={{ maxHeight: "calc(100vh - 340px)", minHeight: "300px" }}
+    >
       <table className="border-collapse text-sm" style={{ minWidth: "1400px" }}>
-        <thead>
+        <thead className="sticky top-0 z-10">
           <tr>
-            <th className="pl-5 pr-3 py-2 text-left" rowSpan={2} />
+            {/* bg-white so row content doesn't bleed through the empty label cell */}
+            <th className="pl-5 pr-3 py-2 text-left bg-white" rowSpan={2} />
             {groups.map(g => (
               <th key={g.label} colSpan={g.span} className={`px-2 py-2 text-center text-xs font-bold text-white uppercase tracking-wide ${g.color}`}>
                 {g.label}
@@ -145,11 +152,11 @@ export default function MainTable({ data }: { data: DashboardResponse }) {
           </tr>
           <tr className="border-b border-slate-200">
             {groups.map(g => (
-              <>
-                <th key={`${g.label}-p`} className="px-2 py-2 text-right text-[11px] font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">Proj</th>
-                <th key={`${g.label}-a`} className="px-2 py-2 text-right text-[11px] font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">Actual</th>
-                <th key={`${g.label}-v`} className="px-2 py-2 text-right text-[11px] font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">Var</th>
-              </>
+              <Fragment key={g.label}>
+                <th className="px-2 py-2 text-right text-[11px] font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap bg-white">Proj</th>
+                <th className="px-2 py-2 text-right text-[11px] font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap bg-white">Actual</th>
+                <th className="px-2 py-2 text-right text-[11px] font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap bg-white">Var</th>
+              </Fragment>
             ))}
           </tr>
         </thead>
