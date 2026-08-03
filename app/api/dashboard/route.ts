@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import type { PeriodKey } from "@/lib/constants";
 
-const VALID_PERIODS: PeriodKey[] = ["ye_total", "q1", "q2", "q3", "q4"];
+const VALID_PERIODS: PeriodKey[] = ["ye_total", "ytd", "q1", "q2", "q3", "q4"];
 const EXCLUDED_ACCTS = "'41009','51028'"; // Held Grain — embedded as constants (not user input)
 
 export type EntityMetrics = { projected: number; actual: number; variance: number };
@@ -52,10 +52,30 @@ export async function GET(req: NextRequest) {
 
   const db = await getDb();
 
+  // ── 0. Uploaded quarters — needed before budget query for YTD mode ─────────
+  const ACTUAL_PERIODS = ["q1", "q2", "q3", "q4"] as const;
+  const uploadedFilesRes = await db.query(
+    "SELECT key FROM uploaded_files WHERE key = ANY($1)",
+    [ACTUAL_PERIODS.map(p => `actuals_${p}`)]
+  );
+  const uploadedActualKeys = new Set(uploadedFilesRes.rows.map((r: { key: string }) => r.key));
+  const uploadedQuarters = ACTUAL_PERIODS.filter(p => uploadedActualKeys.has(`actuals_${p}`));
+
+  // Budget column expression:
+  //   FY  → ye_total column
+  //   YTD → sum of uploaded quarters' columns (e.g. "q1 + q2")
+  //   Q1–Q4 → individual quarter column
+  let budgetColExpr: string;
+  if (period === "ytd") {
+    budgetColExpr = uploadedQuarters.length > 0 ? uploadedQuarters.join(" + ") : "0";
+  } else {
+    budgetColExpr = period; // "ye_total", "q1", "q2", "q3", "q4"
+  }
+
   // ── 1. Budget rows (include int_ext so we can filter combined inline) ──────
   const budgetRes = await db.query(`
     SELECT entity, class, subclass, detail, acct, acct_desc, int_ext,
-           SUM(${period}) AS value
+           SUM(${budgetColExpr}) AS value
     FROM budget_entries
     WHERE class IN ('Income','Expenses') AND acct NOT IN (${EXCLUDED_ACCTS})
     GROUP BY entity, class, subclass, detail, acct, acct_desc, int_ext
@@ -77,7 +97,7 @@ export async function GET(req: NextRequest) {
 
   // Seed elimination: LGC 41025+41026 subtracted from PFP 51120 in combined
   const seedRes = await db.query(`
-    SELECT COALESCE(SUM(${period}),0)::float AS elim
+    SELECT COALESCE(SUM(${budgetColExpr}),0)::float AS elim
     FROM budget_entries WHERE entity='LGC' AND acct IN ('41025','41026')
   `);
   const seedElim: number = seedRes.rows[0].elim ?? 0;
@@ -85,12 +105,11 @@ export async function GET(req: NextRequest) {
     combinedProjMap["51120"] -= seedElim;
 
   // ── 2. Actuals ─────────────────────────────────────────────────────────────
-  // For a specific quarter: pull that period only.
-  // For ye_total: sum all quarters grouped by acct.
-  const ACTUAL_PERIODS = ["q1", "q2", "q3", "q4"] as const;
+  // FY and YTD: sum all uploaded quarters grouped by acct.
+  // Q1–Q4: pull that period only.
   let actualRows: { acct:string; acct_desc:string; class:string; pfp:number; pge:number; lgc:number; elim:number; combined:number }[];
 
-  if (period === "ye_total") {
+  if (period === "ye_total" || period === "ytd") {
     const res = await db.query(`
       SELECT acct, MAX(acct_desc) AS acct_desc, MAX(class) AS class,
              SUM(pfp) AS pfp, SUM(pge) AS pge, SUM(lgc) AS lgc,
@@ -128,12 +147,7 @@ export async function GET(req: NextRequest) {
   const settingsMap: Record<string, string> = {};
   for (const row of settingsRes.rows) settingsMap[row.key] = row.value;
 
-  // Build per-period actuals metadata for the UI
-  const filesRes2 = await db.query(
-    "SELECT key FROM uploaded_files WHERE key = ANY($1)",
-    [ACTUAL_PERIODS.map(p => `actuals_${p}`)]
-  );
-  const uploadedActualKeys = new Set(filesRes2.rows.map((r: { key: string }) => r.key));
+  // Build per-period actuals metadata for the UI (reuse uploadedActualKeys from section 0)
 
   const actualsPeriods: Record<string, { filename: string | null; beg_date: string | null; end_date: string | null; has_file: boolean }> = {};
   for (const p of ACTUAL_PERIODS) {
@@ -150,7 +164,7 @@ export async function GET(req: NextRequest) {
   let ytdBegDate: string | null = null;
   let ytdEndDate: string | null = null;
 
-  if (period === "ye_total") {
+  if (period === "ye_total" || period === "ytd") {
     const uploaded = ACTUAL_PERIODS.filter(p => actualsPeriods[p].has_file);
     ytdBegDate = uploaded.length ? (uploaded.map(p => actualsPeriods[p].beg_date).filter(Boolean).sort()[0] ?? null) : null;
     ytdEndDate = uploaded.length ? (uploaded.map(p => actualsPeriods[p].end_date).filter(Boolean).sort().at(-1) ?? null) : null;
@@ -261,9 +275,9 @@ export async function GET(req: NextRequest) {
 
   // ── 6. Eliminations ────────────────────────────────────────────────────────
   const projElimRes = await db.query(`
-    SELECT acct, acct_desc, class, SUM(${period})::float AS value
+    SELECT acct, acct_desc, class, SUM(${budgetColExpr})::float AS value
     FROM budget_entries WHERE int_ext='Internal'
-    GROUP BY acct, acct_desc, class HAVING SUM(${period}) != 0
+    GROUP BY acct, acct_desc, class HAVING SUM(${budgetColExpr}) != 0
     ORDER BY class, acct
   `);
   const projElimMap = new Map(projElimRes.rows.map(r => [r.acct, r]));
@@ -287,7 +301,7 @@ export async function GET(req: NextRequest) {
   // ── 7. File availability ───────────────────────────────────────────────────
   const filesRes = await db.query("SELECT key FROM uploaded_files WHERE key = 'budget'");
   const hasBudgetFile = filesRes.rows.length > 0;
-  const hasActualsFile = period === "ye_total"
+  const hasActualsFile = (period === "ye_total" || period === "ytd")
     ? ACTUAL_PERIODS.some(p => actualsPeriods[p].has_file)
     : (actualsPeriods[period as typeof ACTUAL_PERIODS[number]]?.has_file ?? false);
 
@@ -297,7 +311,7 @@ export async function GET(req: NextRequest) {
     has_budget_file: hasBudgetFile,
     has_actuals_file: hasActualsFile,
     budget_filename: settingsMap["budget_filename"] ?? null,
-    actuals_filename: period !== "ye_total" ? (actualsPeriods[period as typeof ACTUAL_PERIODS[number]]?.filename ?? null) : null,
+    actuals_filename: (period !== "ye_total" && period !== "ytd") ? (actualsPeriods[period as typeof ACTUAL_PERIODS[number]]?.filename ?? null) : null,
     actuals_periods: actualsPeriods,
     classes,
     net_income: { combined: netComb, pfp: netPfp, pge: netPge, lgc: netLgc },

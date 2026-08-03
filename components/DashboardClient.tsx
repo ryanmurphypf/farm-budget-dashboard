@@ -367,7 +367,7 @@ export default function DashboardClient() {
               </div>
               {!data?.has_actuals && (
                 <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-3 py-1 rounded-lg">
-                  {period === "ye_total"
+                  {(period === "ye_total" || period === "ytd")
                     ? "Upload at least one quarter's actuals to see Actual & Variance columns"
                     : `Upload ${PERIODS.find(p => p.key === period)?.short ?? period.toUpperCase()} actuals to see Actual & Variance columns`}
                 </span>
