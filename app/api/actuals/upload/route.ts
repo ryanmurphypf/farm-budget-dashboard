@@ -4,7 +4,15 @@ import { parseActualsXlsx } from "@/lib/parse-actuals";
 
 export const runtime = "nodejs";
 
+const VALID_PERIODS = ["q1", "q2", "q3", "q4"] as const;
+type ActualPeriod = (typeof VALID_PERIODS)[number];
+
 export async function POST(req: NextRequest) {
+  const periodParam = req.nextUrl.searchParams.get("period") as ActualPeriod | null;
+  if (!periodParam || !VALID_PERIODS.includes(periodParam))
+    return NextResponse.json({ error: "Missing or invalid period — must be q1, q2, q3, or q4" }, { status: 400 });
+  const period = periodParam;
+
   let formData: FormData;
   try { formData = await req.formData(); }
   catch { return NextResponse.json({ error: "Invalid form data" }, { status: 400 }); }
@@ -36,18 +44,18 @@ export async function POST(req: NextRequest) {
   try {
     await client.query("BEGIN");
 
-    await client.query("DELETE FROM actual_entries");
+    await client.query("DELETE FROM actual_entries WHERE period = $1", [period]);
     const BATCH = 100;
     for (let i = 0; i < result.entries.length; i += BATCH) {
       const chunk = result.entries.slice(i, i + BATCH);
       const values: unknown[] = [];
       const placeholders = chunk.map((e, j) => {
-        const b = j * 9;
-        values.push(e.acct, e.acct_desc, e.class, e.pfp, e.pge, e.lgc, e.elim, e.combined, result.end_date);
-        return `($${b+1},$${b+2},$${b+3},$${b+4},$${b+5},$${b+6},$${b+7},$${b+8},$${b+9})`;
+        const b = j * 10;
+        values.push(e.acct, e.acct_desc, e.class, e.pfp, e.pge, e.lgc, e.elim, e.combined, result.end_date, period);
+        return `($${b+1},$${b+2},$${b+3},$${b+4},$${b+5},$${b+6},$${b+7},$${b+8},$${b+9},$${b+10})`;
       }).join(",");
       await client.query(
-        `INSERT INTO actual_entries (acct,acct_desc,class,pfp,pge,lgc,elim,combined,as_of_date) VALUES ${placeholders}`,
+        `INSERT INTO actual_entries (acct,acct_desc,class,pfp,pge,lgc,elim,combined,as_of_date,period) VALUES ${placeholders}`,
         values
       );
     }
@@ -56,13 +64,13 @@ export async function POST(req: NextRequest) {
     await client.query(
       `INSERT INTO uploaded_files (key, filename, data, uploaded_at) VALUES ($1,$2,$3,$4)
        ON CONFLICT (key) DO UPDATE SET filename=EXCLUDED.filename, data=EXCLUDED.data, uploaded_at=EXCLUDED.uploaded_at`,
-      ["actuals", file.name, buffer, now]
+      [`actuals_${period}`, file.name, buffer, now]
     );
     for (const [k, v] of [
-      ["actuals_filename", file.name],
-      ["actuals_uploaded_at", now],
-      ["actuals_beg_date", result.beg_date],
-      ["actuals_end_date", result.end_date],
+      [`actuals_${period}_filename`,   file.name],
+      [`actuals_${period}_uploaded_at`, now],
+      [`actuals_${period}_beg_date`,   result.beg_date],
+      [`actuals_${period}_end_date`,   result.end_date],
     ]) {
       await client.query(
         `INSERT INTO settings (key, value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value`,
@@ -78,5 +86,12 @@ export async function POST(req: NextRequest) {
     client.release();
   }
 
-  return NextResponse.json({ ok: true, count: result.entries.length, beg_date: result.beg_date, end_date: result.end_date, filename: file.name });
+  return NextResponse.json({
+    ok: true,
+    period,
+    count: result.entries.length,
+    beg_date: result.beg_date,
+    end_date: result.end_date,
+    filename: file.name,
+  });
 }

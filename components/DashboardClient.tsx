@@ -20,12 +20,20 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "eliminations", label: "Eliminations" },
 ];
 
+type ActualPeriod = "q1" | "q2" | "q3" | "q4";
+const ACTUAL_PERIODS: { key: ActualPeriod; short: string }[] = [
+  { key: "q1", short: "Q1" },
+  { key: "q2", short: "Q2" },
+  { key: "q3", short: "Q3" },
+  { key: "q4", short: "Q4" },
+];
+
 type UploadState = { status: "idle" } | { status: "uploading"; label: string } | { status: "success"; msg: string } | { status: "error"; message: string };
 
 export default function DashboardClient() {
   const router = useRouter();
   const budgetFileRef = useRef<HTMLInputElement>(null);
-  const actualsFileRef = useRef<HTMLInputElement>(null);
+  const actualsFileRefs = useRef<Record<ActualPeriod, HTMLInputElement | null>>({ q1: null, q2: null, q3: null, q4: null });
 
   const [tab, setTab] = useState<TabKey>("main");
   const [period, setPeriod] = useState<PeriodKey>("ye_total");
@@ -47,7 +55,7 @@ export default function DashboardClient() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  async function handleUpload(file: File, endpoint: string, label: string) {
+  async function handleUpload(file: File, endpoint: string, label: string, isBudget = false, actualPeriod?: ActualPeriod) {
     setUploadState({ status: "uploading", label });
     const form = new FormData();
     form.append("file", file);
@@ -57,9 +65,9 @@ export default function DashboardClient() {
       if (!res.ok) {
         setUploadState({ status: "error", message: json.error ?? "Upload failed" });
       } else {
-        const msg = endpoint.includes("actuals")
-          ? `Actuals updated — ${json.count} rows · ${fmtDate(json.beg_date)} – ${fmtDate(json.end_date)}`
-          : `Budget updated — ${json.count} rows from ${json.filename}`;
+        const msg = isBudget
+          ? `Budget updated — ${json.count} rows from ${json.filename}`
+          : `${label} actuals updated — ${json.count} rows · ${fmtDate(json.beg_date)} – ${fmtDate(json.end_date)}`;
         setUploadState({ status: "success", msg });
         await fetchData();
         setTimeout(() => setUploadState({ status: "idle" }), 7000);
@@ -68,7 +76,8 @@ export default function DashboardClient() {
       setUploadState({ status: "error", message: "Network error — please try again" });
     } finally {
       if (budgetFileRef.current) budgetFileRef.current.value = "";
-      if (actualsFileRef.current) actualsFileRef.current.value = "";
+      if (actualPeriod && actualsFileRefs.current[actualPeriod])
+        actualsFileRefs.current[actualPeriod]!.value = "";
     }
   }
 
@@ -124,43 +133,81 @@ export default function DashboardClient() {
 
             {/* Hidden file inputs */}
             <input ref={budgetFileRef} type="file" accept=".xlsx,.xlsm" className="hidden"
-              onChange={e => { const f = e.target.files?.[0]; if (f) handleUpload(f, "/api/budget/upload", "Budget"); }} />
-            <input ref={actualsFileRef} type="file" accept=".xlsx,.xlsm" className="hidden"
-              onChange={e => { const f = e.target.files?.[0]; if (f) handleUpload(f, "/api/actuals/upload", "Actuals"); }} />
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleUpload(f, "/api/budget/upload", "Budget", true); }} />
+            {ACTUAL_PERIODS.map(ap => (
+              <input key={ap.key} type="file" accept=".xlsx,.xlsm" className="hidden"
+                ref={el => { actualsFileRefs.current[ap.key] = el; }}
+                onChange={e => {
+                  const f = e.target.files?.[0];
+                  if (f) handleUpload(f, `/api/actuals/upload?period=${ap.key}`, ap.short, false, ap.key);
+                }} />
+            ))}
 
-            {/* Upload + Download buttons */}
-            {([
-              { label: "Update Budget",  uploadLabel: "Budget",  ref: budgetFileRef,  downloadHref: "/api/budget/download",  hasFile: data?.has_budget_file,  filename: data?.budget_filename },
-              { label: "Update Actuals", uploadLabel: "Actuals", ref: actualsFileRef, downloadHref: "/api/actuals/download", hasFile: data?.has_actuals_file, filename: data?.actuals_filename },
-            ] as const).map((item) => {
-              const isThis = isUploading && uploadState.status === "uploading" && uploadState.label === item.uploadLabel;
-              return (
-                <div key={item.label} className="flex items-center gap-1">
-                  {/* Upload button */}
-                  <button onClick={() => item.ref.current?.click()} disabled={isUploading}
-                    className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-medium border transition-all ${
-                      isThis ? "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed"
-                      : "bg-white border-slate-300 text-slate-700 hover:bg-slate-50 hover:border-slate-400"
-                    } ${item.hasFile ? "rounded-r-none border-r-0" : ""}`}>
-                    {isThis
-                      ? <><svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>Uploading…</>
-                      : <><svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>{item.label}</>
-                    }
-                  </button>
-                  {/* Download link — only shown when a file exists */}
-                  {item.hasFile && (
-                    <a href={item.downloadHref} download={item.filename ?? undefined}
-                      title={`Download ${item.filename ?? "file"}`}
-                      className="flex items-center justify-center px-2.5 py-2 rounded-r-lg border border-slate-300 bg-white text-slate-500 hover:bg-green-50 hover:text-green-700 hover:border-green-300 transition-all"
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                      </svg>
-                    </a>
-                  )}
-                </div>
-              );
-            })}
+            {/* Budget upload/download */}
+            <div className="flex items-center gap-1">
+              <button onClick={() => budgetFileRef.current?.click()} disabled={isUploading}
+                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-medium border transition-all ${
+                  isUploading && uploadState.status === "uploading" && uploadState.label === "Budget"
+                    ? "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed"
+                    : "bg-white border-slate-300 text-slate-700 hover:bg-slate-50 hover:border-slate-400"
+                } ${data?.has_budget_file ? "rounded-r-none border-r-0" : ""}`}>
+                {isUploading && uploadState.status === "uploading" && uploadState.label === "Budget"
+                  ? <><svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>Uploading…</>
+                  : <><svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>Update Budget</>
+                }
+              </button>
+              {data?.has_budget_file && (
+                <a href="/api/budget/download" download={data.budget_filename ?? undefined}
+                  title={`Download ${data.budget_filename ?? "budget"}`}
+                  className="flex items-center justify-center px-2.5 py-2 rounded-r-lg border border-slate-300 bg-white text-slate-500 hover:bg-green-50 hover:text-green-700 hover:border-green-300 transition-all">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                </a>
+              )}
+            </div>
+
+            {/* Actuals — one slot per quarter */}
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-slate-500 font-medium mr-0.5">Actuals:</span>
+              {ACTUAL_PERIODS.map(ap => {
+                const meta = data?.actuals_periods?.[ap.key];
+                const hasFile = meta?.has_file ?? false;
+                const isThis = isUploading && uploadState.status === "uploading" && uploadState.label === ap.short;
+                return (
+                  <div key={ap.key} className="flex items-center">
+                    <button
+                      onClick={() => actualsFileRefs.current[ap.key]?.click()}
+                      disabled={isUploading}
+                      title={hasFile ? `${ap.short}: ${meta?.filename ?? ""} (${fmtDate(meta?.beg_date ?? "")} – ${fmtDate(meta?.end_date ?? "")})` : `Upload ${ap.short} actuals`}
+                      className={`flex items-center gap-1 px-2.5 py-2 text-xs font-medium border transition-all ${
+                        isThis
+                          ? "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed"
+                          : hasFile
+                          ? "bg-green-50 border-green-300 text-green-700 hover:bg-green-100"
+                          : "bg-white border-slate-300 text-slate-500 hover:bg-slate-50 hover:border-slate-400"
+                      } ${hasFile ? "rounded-l-lg rounded-r-none border-r-0" : "rounded-lg"}`}>
+                      {isThis
+                        ? <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                        : hasFile
+                        ? <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg>
+                        : <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                      }
+                      {ap.short}
+                    </button>
+                    {hasFile && (
+                      <a href={`/api/actuals/download?period=${ap.key}`} download={meta?.filename ?? undefined}
+                        title={`Download ${meta?.filename ?? ap.short + " actuals"}`}
+                        className="flex items-center justify-center px-2 py-2 rounded-r-lg border border-green-300 bg-green-50 text-green-600 hover:bg-green-100 hover:text-green-800 transition-all">
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                      </a>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
 
             <div className="w-px h-5 bg-slate-200" />
             <button onClick={handleLogout} className="text-xs text-slate-500 hover:text-slate-700 transition-colors">Sign out</button>
@@ -320,7 +367,9 @@ export default function DashboardClient() {
               </div>
               {!data?.has_actuals && (
                 <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-3 py-1 rounded-lg">
-                  Upload actuals to see Actual & Variance columns
+                  {period === "ye_total"
+                    ? "Upload at least one quarter's actuals to see Actual & Variance columns"
+                    : `Upload ${PERIODS.find(p => p.key === period)?.short ?? period.toUpperCase()} actuals to see Actual & Variance columns`}
                 </span>
               )}
             </div>

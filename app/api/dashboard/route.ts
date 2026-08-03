@@ -12,6 +12,13 @@ export type SubclassRow = { subclass: string; combined: EntityMetrics; pfp: Enti
 export type ClassRow    = { class: string; combined: EntityMetrics; pfp: EntityMetrics; pge: EntityMetrics; lgc: EntityMetrics; subclasses: SubclassRow[] };
 export type EliminationRow = { acct: string; acct_desc: string; class: string; projected: number; actual: number };
 
+export type ActualsPeriodMeta = {
+  filename: string | null;
+  beg_date: string | null;
+  end_date: string | null;
+  has_file: boolean;
+};
+
 export type DashboardResponse = {
   period: string;
   as_of_date: string | null;
@@ -22,6 +29,7 @@ export type DashboardResponse = {
   has_actuals_file: boolean;
   budget_filename: string | null;
   actuals_filename: string | null;
+  actuals_periods: Record<string, ActualsPeriodMeta>;
   classes: ClassRow[];
   net_income: { combined: EntityMetrics; pfp: EntityMetrics; pge: EntityMetrics; lgc: EntityMetrics };
   eliminations: EliminationRow[];
@@ -77,27 +85,81 @@ export async function GET(req: NextRequest) {
     combinedProjMap["51120"] -= seedElim;
 
   // ── 2. Actuals ─────────────────────────────────────────────────────────────
-  const actualRes = await db.query(`
-    SELECT acct, acct_desc, class, pfp, pge, lgc, elim, combined
-    FROM actual_entries WHERE acct NOT IN (${EXCLUDED_ACCTS})
-    ORDER BY class, acct
-  `);
-  const actualRows = actualRes.rows as { acct:string; acct_desc:string; class:string; pfp:number; pge:number; lgc:number; elim:number; combined:number }[];
+  // For a specific quarter: pull that period only.
+  // For ye_total: sum all quarters grouped by acct.
+  const ACTUAL_PERIODS = ["q1", "q2", "q3", "q4"] as const;
+  let actualRows: { acct:string; acct_desc:string; class:string; pfp:number; pge:number; lgc:number; elim:number; combined:number }[];
+
+  if (period === "ye_total") {
+    const res = await db.query(`
+      SELECT acct, MAX(acct_desc) AS acct_desc, MAX(class) AS class,
+             SUM(pfp) AS pfp, SUM(pge) AS pge, SUM(lgc) AS lgc,
+             SUM(elim) AS elim, SUM(combined) AS combined
+      FROM actual_entries
+      WHERE acct NOT IN (${EXCLUDED_ACCTS})
+      GROUP BY acct
+      ORDER BY MAX(class), acct
+    `);
+    actualRows = res.rows;
+  } else {
+    const res = await db.query(`
+      SELECT acct, acct_desc, class, pfp, pge, lgc, elim, combined
+      FROM actual_entries
+      WHERE period = $1 AND acct NOT IN (${EXCLUDED_ACCTS})
+      ORDER BY class, acct
+    `, [period]);
+    actualRows = res.rows;
+  }
 
   const hasActuals = actualRows.length > 0;
   const actualMap: Record<string, { pfp:number; pge:number; lgc:number; combined:number }> = {};
   for (const r of actualRows) actualMap[r.acct] = { pfp: r.pfp, pge: r.pge, lgc: r.lgc, combined: r.combined };
 
-  // Dates
-  const settingsRes = await db.query("SELECT key, value FROM settings WHERE key = ANY($1)", [
-    ["actuals_beg_date","actuals_end_date","budget_filename","actuals_filename"],
-  ]);
+  // Settings — load budget filename + all 4 period actuals metadata
+  const settingsKeys = [
+    "budget_filename",
+    ...ACTUAL_PERIODS.flatMap(p => [
+      `actuals_${p}_filename`,
+      `actuals_${p}_beg_date`,
+      `actuals_${p}_end_date`,
+    ]),
+  ];
+  const settingsRes = await db.query("SELECT key, value FROM settings WHERE key = ANY($1)", [settingsKeys]);
   const settingsMap: Record<string, string> = {};
   for (const row of settingsRes.rows) settingsMap[row.key] = row.value;
 
-  const asOfDate    = settingsMap["actuals_end_date"] ?? null;
-  const ytdBegDate  = settingsMap["actuals_beg_date"] ?? null;
-  const ytdEndDate  = settingsMap["actuals_end_date"] ?? null;
+  // Build per-period actuals metadata for the UI
+  const filesRes2 = await db.query(
+    "SELECT key FROM uploaded_files WHERE key = ANY($1)",
+    [ACTUAL_PERIODS.map(p => `actuals_${p}`)]
+  );
+  const uploadedActualKeys = new Set(filesRes2.rows.map((r: { key: string }) => r.key));
+
+  const actualsPeriods: Record<string, { filename: string | null; beg_date: string | null; end_date: string | null; has_file: boolean }> = {};
+  for (const p of ACTUAL_PERIODS) {
+    actualsPeriods[p] = {
+      filename:  settingsMap[`actuals_${p}_filename`]  ?? null,
+      beg_date:  settingsMap[`actuals_${p}_beg_date`]  ?? null,
+      end_date:  settingsMap[`actuals_${p}_end_date`]  ?? null,
+      has_file:  uploadedActualKeys.has(`actuals_${p}`),
+    };
+  }
+
+  // Dates for current period (or range across all for ye_total)
+  let asOfDate: string | null = null;
+  let ytdBegDate: string | null = null;
+  let ytdEndDate: string | null = null;
+
+  if (period === "ye_total") {
+    const uploaded = ACTUAL_PERIODS.filter(p => actualsPeriods[p].has_file);
+    ytdBegDate = uploaded.length ? (uploaded.map(p => actualsPeriods[p].beg_date).filter(Boolean).sort()[0] ?? null) : null;
+    ytdEndDate = uploaded.length ? (uploaded.map(p => actualsPeriods[p].end_date).filter(Boolean).sort().at(-1) ?? null) : null;
+    asOfDate = ytdEndDate;
+  } else {
+    asOfDate   = settingsMap[`actuals_${period}_end_date`]   ?? null;
+    ytdBegDate = settingsMap[`actuals_${period}_beg_date`]   ?? null;
+    ytdEndDate = settingsMap[`actuals_${period}_end_date`]   ?? null;
+  }
 
   // ── 3. Classification lookup ───────────────────────────────────────────────
   type Info = { class: string; subclass: string; detail: string; acct_desc: string };
@@ -223,16 +285,20 @@ export async function GET(req: NextRequest) {
   eliminations.sort((a,b) => a.class.localeCompare(b.class) || a.acct.localeCompare(b.acct));
 
   // ── 7. File availability ───────────────────────────────────────────────────
-  const filesRes = await db.query("SELECT key FROM uploaded_files WHERE key IN ('budget','actuals')");
-  const uploadedKeys = new Set(filesRes.rows.map((r: { key: string }) => r.key));
+  const filesRes = await db.query("SELECT key FROM uploaded_files WHERE key = 'budget'");
+  const hasBudgetFile = filesRes.rows.length > 0;
+  const hasActualsFile = period === "ye_total"
+    ? ACTUAL_PERIODS.some(p => actualsPeriods[p].has_file)
+    : (actualsPeriods[period as typeof ACTUAL_PERIODS[number]]?.has_file ?? false);
 
   return NextResponse.json({
     period, as_of_date: asOfDate, ytd_beg_date: ytdBegDate, ytd_end_date: ytdEndDate,
     has_actuals: hasActuals,
-    has_budget_file: uploadedKeys.has("budget"),
-    has_actuals_file: uploadedKeys.has("actuals"),
+    has_budget_file: hasBudgetFile,
+    has_actuals_file: hasActualsFile,
     budget_filename: settingsMap["budget_filename"] ?? null,
-    actuals_filename: settingsMap["actuals_filename"] ?? null,
+    actuals_filename: period !== "ye_total" ? (actualsPeriods[period as typeof ACTUAL_PERIODS[number]]?.filename ?? null) : null,
+    actuals_periods: actualsPeriods,
     classes,
     net_income: { combined: netComb, pfp: netPfp, pge: netPge, lgc: netLgc },
     eliminations,

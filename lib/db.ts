@@ -67,11 +67,13 @@ async function initSchema(): Promise<Pool> {
       lgc DOUBLE PRECISION DEFAULT 0,
       elim DOUBLE PRECISION DEFAULT 0,
       combined DOUBLE PRECISION DEFAULT 0,
-      as_of_date TEXT NOT NULL
+      as_of_date TEXT NOT NULL,
+      period TEXT NOT NULL DEFAULT 'ye_total'
     );
 
-    CREATE INDEX IF NOT EXISTS idx_actual_acct  ON actual_entries(acct);
-    CREATE INDEX IF NOT EXISTS idx_actual_class ON actual_entries(class);
+    CREATE INDEX IF NOT EXISTS idx_actual_acct   ON actual_entries(acct);
+    CREATE INDEX IF NOT EXISTS idx_actual_class  ON actual_entries(class);
+    CREATE INDEX IF NOT EXISTS idx_actual_period ON actual_entries(period);
 
     CREATE TABLE IF NOT EXISTS uploaded_files (
       key TEXT PRIMARY KEY,
@@ -80,6 +82,10 @@ async function initSchema(): Promise<Pool> {
       uploaded_at TEXT NOT NULL
     );
   `);
+
+  // Migrate: add period column if it doesn't exist yet
+  await p.query(`ALTER TABLE actual_entries ADD COLUMN IF NOT EXISTS period TEXT NOT NULL DEFAULT 'ye_total'`);
+  await p.query(`CREATE INDEX IF NOT EXISTS idx_actual_period ON actual_entries(period)`);
 
   // Seed password if missing
   const pwRow = await p.query("SELECT value FROM settings WHERE key = 'password_hash'");
