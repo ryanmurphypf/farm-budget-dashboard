@@ -86,6 +86,14 @@ async function initSchema(): Promise<Pool> {
   await p.query(`ALTER TABLE actual_entries ADD COLUMN IF NOT EXISTS period TEXT NOT NULL DEFAULT 'ye_total'`);
   await p.query(`CREATE INDEX IF NOT EXISTS idx_actual_period ON actual_entries(period)`);
 
+  // One-time cleanup: remove legacy rows uploaded before multi-period support.
+  // Those rows have period='ye_total' and would double-count FY/YTD totals.
+  const legacyCleanedRow = await p.query("SELECT value FROM settings WHERE key = 'legacy_actuals_cleaned'");
+  if (legacyCleanedRow.rows.length === 0) {
+    await p.query("DELETE FROM actual_entries WHERE period = 'ye_total'");
+    await p.query("INSERT INTO settings (key, value) VALUES ('legacy_actuals_cleaned', 'true')");
+  }
+
   // Seed password if missing
   const pwRow = await p.query("SELECT value FROM settings WHERE key = 'password_hash'");
   if (pwRow.rows.length === 0) {
