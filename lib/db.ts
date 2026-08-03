@@ -71,9 +71,8 @@ async function initSchema(): Promise<Pool> {
       period TEXT NOT NULL DEFAULT 'ye_total'
     );
 
-    CREATE INDEX IF NOT EXISTS idx_actual_acct   ON actual_entries(acct);
-    CREATE INDEX IF NOT EXISTS idx_actual_class  ON actual_entries(class);
-    CREATE INDEX IF NOT EXISTS idx_actual_period ON actual_entries(period);
+    CREATE INDEX IF NOT EXISTS idx_actual_acct  ON actual_entries(acct);
+    CREATE INDEX IF NOT EXISTS idx_actual_class ON actual_entries(class);
 
     CREATE TABLE IF NOT EXISTS uploaded_files (
       key TEXT PRIMARY KEY,
