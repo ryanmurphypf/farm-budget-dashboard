@@ -3,7 +3,6 @@ import { getDb } from "@/lib/db";
 import type { PeriodKey } from "@/lib/constants";
 
 const VALID_PERIODS: PeriodKey[] = ["ye_total", "ytd", "q1", "q2", "q3", "q4"];
-const EXCLUDED_ACCTS = "'41009','51028'"; // Held Grain — embedded as constants (not user input)
 
 export type EntityMetrics = { projected: number; actual: number; variance: number };
 export type AccountRow  = { acct: string; acct_desc: string; combined: EntityMetrics; pfp: EntityMetrics; pge: EntityMetrics; lgc: EntityMetrics };
@@ -77,7 +76,7 @@ export async function GET(req: NextRequest) {
     SELECT entity, class, subclass, detail, acct, acct_desc, int_ext,
            SUM(${budgetColExpr}) AS value
     FROM budget_entries
-    WHERE class IN ('Income','Expenses') AND acct NOT IN (${EXCLUDED_ACCTS})
+    WHERE class IN ('Income','Expenses')
     GROUP BY entity, class, subclass, detail, acct, acct_desc, int_ext
     ORDER BY class, subclass, detail, acct
   `);
@@ -115,7 +114,6 @@ export async function GET(req: NextRequest) {
              SUM(pfp) AS pfp, SUM(pge) AS pge, SUM(lgc) AS lgc,
              SUM(elim) AS elim, SUM(combined) AS combined
       FROM actual_entries
-      WHERE acct NOT IN (${EXCLUDED_ACCTS})
       GROUP BY acct
       ORDER BY MAX(class), acct
     `);
@@ -124,7 +122,7 @@ export async function GET(req: NextRequest) {
     const res = await db.query(`
       SELECT acct, acct_desc, class, pfp, pge, lgc, elim, combined
       FROM actual_entries
-      WHERE period = $1 AND acct NOT IN (${EXCLUDED_ACCTS})
+      WHERE period = $1
       ORDER BY class, acct
     `, [period]);
     actualRows = res.rows;
